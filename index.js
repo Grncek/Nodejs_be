@@ -22,9 +22,30 @@ app.listen(port, () => {
 });
 
 
+async function getRandomCoordinatesInEurope() {
+    // Define latitude and longitude ranges for Europe
+    const minLatitude = 35; // Southern boundary of Europe
+    const maxLatitude = 70; // Northern boundary of Europe
+    const minLongitude = -10; // Western boundary of Europe
+    const maxLongitude = 40; // Eastern boundary of Europe
+
+    // Generate random latitude and longitude within Europe's bounds
+    const latitude = Math.random() * (maxLatitude - minLatitude) + minLatitude;
+    const longitude = Math.random() * (maxLongitude - minLongitude) + minLongitude;
+
+    return {
+        latitude: latitude,
+        longitude: longitude
+    };
+}
+
 async function getAddress() {
     try {
-        const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${APIKEY}&q=50.0793344,14.4572416&aqi=no&lang=cs`);
+        const coordinates = getRandomCoordinatesInEurope()
+        console.log((await coordinates).latitude)
+        console.log((await coordinates).longitude)
+        console.log(`https://api.weatherapi.com/v1/current.json?key=${APIKEY}&q=${(await coordinates).latitude},${(await coordinates).longitude}&aqi=no&lang=cs`)
+        const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${APIKEY}&q=${(await coordinates).latitude},${(await coordinates).longitude}&aqi=no&lang=cs`);
         if (!response.ok) {
             throw new Error('Failed to fetch data');
         }
