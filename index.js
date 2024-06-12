@@ -109,6 +109,17 @@ async function getTemperature(latitude, longitude) {
     }
 }
 
+app.get('/mockLeaderboard', (req, res) => {
+  const leaderboard = [
+    { name: 'Alice', highestScore: 1500 },
+    { name: 'Bob', highestScore: 1200 },
+    { name: 'Charlie', highestScore: 1100 },
+    { name: 'David', highestScore: 1050 },
+    { name: 'Eve', highestScore: 1000 },
+];
+  res.json(leaderboard)
+});
+
  app.get('/getTemperature', async (req, res) => {
     try {
         const data = await getTemperature("40.5499", "34.95377");
