@@ -59,9 +59,19 @@ async function GetWebcamID(results, rad, APIKEY_WEBCAM){
       console.log("webcamID je:", webcamdata.webcams[0].webcamId)
       //Zjisti Latitude a longitude dané webcam
         const realCoordinates = await getAddress(webcamdata.webcams[0].webcamId)
-      //Zjisti teplotu od daných latitude a longitude
-      console.log("Real Latitude je: ",realCoordinates.latitude,"Real Longitude je: ",realCoordinates.longitude)
-        const temp = await getTemperature(realCoordinates.latitude,realCoordinates.longitude)
+      console.log("Real Latitude je: ",realCoordinates.latitude,"Real Longitude je: ",realCoordinates.longitude, 'Čas posledního framu na Real webce je:', realCoordinates.lastUpdatedTime)
+      //
+        const webcamdate = realCoordinates.lastUpdatedTime.slice(0, 10);
+        const webcamtime = parseInt(realCoordinates.lastUpdatedTime.slice(11, 13));
+        console.log('Čas(hodina) na webce (UTC 0):', webcamtime)
+        const timezoneFetch = await fetch(`https://timeapi.io/api/TimeZone/coordinate?latitude=${realCoordinates.latitude}&longitude=${realCoordinates.longitude}`);
+        const timezoneInfo = await timezoneFetch.json();
+        const UTCOffset = timezoneInfo.currentUtcOffset.seconds / 3600;
+        console.log('Utc offset je:', UTCOffset);
+        const adjustedTime = (webcamtime + UTCOffset);
+        console.log('Čas(hodina) na webce (UTC lokální):', adjustedTime)
+      //Zjisti teplotu od daných latitude a longitude z času posledního framu webky (musel jsem předělávat letní čas a timezonu jak KKT^, POGCHAMP)
+        const temp = await getTemperature(realCoordinates.latitude,realCoordinates.longitude, webcamdate, adjustedTime)
       //Tady vrátím všechno (akrotá že vubec)
       return { webcamId: webcamdata.webcams[0].webcamId, temperature: parseFloat(temp.temperature) }
     } catch (error) {
@@ -86,7 +96,8 @@ async function getAddress(ID) {
     console.log(webcamdata)
     return {
       latitude: webcamdata.location.latitude,
-      longitude: webcamdata.location.longitude
+      longitude: webcamdata.location.longitude,
+      lastUpdatedTime: webcamdata.lastUpdatedOn
   }
   } catch (error) {
     console.error(error);
@@ -94,15 +105,15 @@ async function getAddress(ID) {
   }
 }
 
-async function getTemperature(latitude, longitude) {
+async function getTemperature(latitude, longitude, date, time) {
     try {
-        console.log(`https://api.weatherapi.com/v1/current.json?key=${APIKEY_WEATHER}&q=${latitude},${longitude}&aqi=no&lang=cs`)
-        const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${APIKEY_WEATHER}&q=${latitude},${longitude}&aqi=no&lang=cs`);
+        console.log(`https://api.weatherapi.com/v1/history.json?key=${APIKEY_WEATHER}&q=${latitude},${longitude}&aqi=no&lang=cs&dt=${date}&hour=${time}`)
+        const response = await fetch(`https://api.weatherapi.com/v1/history.json?key=${APIKEY_WEATHER}&q=${latitude},${longitude}&aqi=no&lang=cs&dt=${date}&hour=${time}`);
         if (!response.ok) {
             throw new Error('Failed to fetch data');
         }
         const temperatureData = await response.json();
-        return {temperature: temperatureData.current.temp_c };
+        return {temperature: temperatureData.forecast.forecastday[0].hour[0].temp_c};
     } catch (error) {
         console.error(error);
         return {}; // return an empty object in case of error
