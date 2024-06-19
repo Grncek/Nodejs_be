@@ -1,6 +1,7 @@
 const express = require('express');
 const app = express();
 const port = 3000;
+const fs = require('fs');
 const APIKEY_WEATHER = '7b674925742140a6a95130205233006';
 const APIKEY_WEBCAM = 'zhghS00P2rYGG49RED2hVwENqxQl2y7I'
 
@@ -120,6 +121,75 @@ async function getTemperature(latitude, longitude, date, time) {
     }
 }
 
+//napise do souboru dnesni datum + souradnice, pokud neexistujou
+function initDaily() {
+  const now = new Date()
+  const dateString = now.toISOString().split('T')[0];
+  const loc = getRandomCoordinatesInEurope();
+  const entry = {
+    date: dateString,
+    latitude: loc.latitude,
+    longitude: loc.longitude
+  };
+  let dailyLocs = [];
+  if (fs.existsSync('dailylocs.json')){
+    dailyLocs = JSON.parse(fs.readFileSync('dailylocs.json', 'utf-8'));
+    console.log(dailyLocs)
+  };
+
+  if(dailyLocs.some(e => e.date === dateString)){
+    console.log('Dailylocs already has todays data');
+  }
+  else{
+    dailyLocs.push(entry);
+    fs.writeFileSync('dailylocs.json', JSON.stringify(dailyLocs, null, 2), 'utf-8');
+    console.log('Dailylocs updated with', entry)
+  }
+}
+
+async function GetWebcamIDDaily(results, rad, APIKEY_WEBCAM){
+  initDaily()
+  const jsondata = fs.readFileSync('dailylocs.json', 'utf-8');
+  const dataArray = JSON.parse(jsondata);
+  const coordinates = dataArray[0]
+  console.log(dataArray)
+  console.log((await coordinates).latitude)
+  console.log((await coordinates).longitude)
+  try{
+    const response = await fetch(`https://api.windy.com/webcams/api/v3/webcams?lang=en&limit=${results}&offset=0&nearby=${(await coordinates).latitude}%2C${(await coordinates).longitude}%2C${rad}`, {
+      headers: {
+          "x-windy-api-key": APIKEY_WEBCAM
+      }
+  });
+    if (!response.ok) {
+      throw new Error('Failed to fetch');
+    }
+    const webcamdata = await response.json();
+    console.log(webcamdata)
+    console.log("webcamID je:", webcamdata.webcams[0].webcamId)
+    //Zjisti Latitude a longitude dané webcam
+      const realCoordinates = await getAddress(webcamdata.webcams[0].webcamId)
+    console.log("Real Latitude je: ",realCoordinates.latitude,"Real Longitude je: ",realCoordinates.longitude, 'Čas posledního framu na Real webce je:', realCoordinates.lastUpdatedTime)
+    //
+      const webcamdate = realCoordinates.lastUpdatedTime.slice(0, 10);
+      const webcamtime = parseInt(realCoordinates.lastUpdatedTime.slice(11, 13));
+      console.log('Čas(hodina) na webce (UTC 0):', webcamtime)
+      const timezoneFetch = await fetch(`https://timeapi.io/api/TimeZone/coordinate?latitude=${realCoordinates.latitude}&longitude=${realCoordinates.longitude}`);
+      const timezoneInfo = await timezoneFetch.json();
+      const UTCOffset = timezoneInfo.currentUtcOffset.seconds / 3600;
+      console.log('Utc offset je:', UTCOffset);
+      const adjustedTime = (webcamtime + UTCOffset);
+      console.log('Čas(hodina) na webce (UTC lokální):', adjustedTime)
+    //Zjisti teplotu od daných latitude a longitude z času posledního framu webky (musel jsem předělávat letní čas a timezonu jak KKT^, POGCHAMP)
+      const temp = await getTemperature(realCoordinates.latitude,realCoordinates.longitude, webcamdate, adjustedTime)
+    //Tady vrátím všechno (akrotá že vubec)
+    return { webcamId: webcamdata.webcams[0].webcamId, temperature: parseFloat(temp.temperature) }
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
 app.get('/mockLeaderboard', (req, res) => {
   const leaderboard = [
     { name: 'Alice', highestScore: 1500 },
@@ -130,6 +200,15 @@ app.get('/mockLeaderboard', (req, res) => {
 ];
   res.json(leaderboard)
 });
+
+app.get('/dailyLoc', async (req, res) =>{
+  try {
+    const data = await GetWebcamIDDaily(1,250,APIKEY_WEBCAM);
+    res.json(data);
+  } catch (error) {
+      res.status(500).json({ error: error.message });
+  }
+})
 
  app.get('/getTemperature', async (req, res) => {
     try {
